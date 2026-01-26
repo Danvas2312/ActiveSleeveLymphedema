@@ -1,0 +1,60 @@
+# Arduino/ESP32 Build Files
+*.hex
+*.eep
+*.elf
+*.map
+*.bin
+build/
+*.build/
+
+# Compiled Object Files
+*.o
+*.obj
+*.slo
+*.lo
+
+# Libraries
+*.lib
+*.a
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Arduino IDE
+*.ino.cpp
+*.ino.globals.h
+
+# ESP32 Specific
+sdkconfig
+sdkconfig.old
+.pio/
+
+# IDE Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary Files
+*.tmp
+*.bak
+*.log
+*~
+
+# Secrets and Credentials
+secrets.h
+credentials.h
+config_private.h
+*.key
+*.pem
+
+# Test Files (optional - uncomment if we don't want to track tests)
+# test_*.ino
