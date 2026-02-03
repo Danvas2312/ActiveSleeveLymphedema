@@ -1,7 +1,6 @@
 /*
  * LymphedemaSleeve - Main Firmware
  * Group 10 - Biomedical Senior Design
- * Software Lead: [Your Name Here]
  */
 
 #include "pins.h"
