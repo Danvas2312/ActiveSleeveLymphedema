@@ -24,5 +24,40 @@
 #define PRESSURE_SENSOR_1_PIN 36  // VP (ADC1_CH0) - Proximal bladder
 #define PRESSURE_SENSOR_2_PIN 39  // VN (ADC1_CH3) - Middle bladder  
 #define PRESSURE_SENSOR_3_PIN 34  // ADC1_CH6 - Distal bladder
+/ Note: Pins 36, 39, 34, 35 are INPUT ONLY (no pullup/pulldown)
+// These are perfect for analog sensors
+
+// ============================================================================
+// MOTOR DRIVER (TB6612FNG) - Controls Pump and Solenoid
+// ============================================================================
+
+// PUMP CONTROL (Motor A on TB6612FNG)
+#define PUMP_PWM_PIN 25         // PWMA - Speed control (PWM capable)
+#define PUMP_IN1_PIN 26         // AIN1 - Direction control 1
+#define PUMP_IN2_PIN 27         // AIN2 - Direction control 2
+
+// SOLENOID VALVE CONTROL (Motor B on TB6612FNG)  
+#define SOLENOID_PWM_PIN 32     // PWMB - Can use as digital ON/OFF
+#define SOLENOID_IN1_PIN 33     // BIN1 - Direction control 1
+#define SOLENOID_IN2_PIN 14     // BIN2 - Direction control 2
+
+// MOTOR DRIVER STANDBY PIN
+#define MOTOR_STBY_PIN 12       // STBY - Set HIGH to enable motors, LOW to disable
+
+// ============================================================================
+// STATUS INDICATORS (Optional but Recommended)
+// ============================================================================
+
+#define LED_STATUS_PIN 2        // Built-in LED on most ESP32 boards
+#define LED_CALIBRATION_PIN 4   // External LED for calibration feedback
+#define LED_COMPRESSION_PIN 16  // External LED for compression indication
+
+// ============================================================================
+// POWER MANAGEMENT (Optional)
+// ============================================================================
+
+#define BATTERY_VOLTAGE_PIN 35  // ADC1_CH7 - For battery monitoring
+                                // Connect to voltage divider from battery
+
 
 
