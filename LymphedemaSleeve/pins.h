@@ -1,45 +1,28 @@
 // pins.h
 // Pin definitions for LymphedemaSleeve project
 // Group 10 - Biomedical Senior Design
-
 #ifndef PINS_H
 #define PINS_H
 
-// ========================================
-// MOTOR DRIVER PINS (TB6612FNG)
-// ========================================
-// Motor A = Air Pump
-#define AIN1 25   // Pump direction control 1
-#define AIN2 26   // Pump direction control 2
-#define PWMA 27   // Pump speed control (PWM)
+// ============================================================================
+// I2C COMMUNICATION (TMP117 Temperature Sensor)
+// ============================================================================
+// Note: ESP32 has default I2C pins, but you can reassign them if needed
 
-// Motor B = Solenoid Valve
-#define BIN1 32   // Solenoid control 1
-#define BIN2 33   // Solenoid control 2
-#define PWMB 14   // Solenoid control (PWM)
+#define I2C_SDA_PIN 21          // I2C Data line (default for ESP32)
+#define I2C_SCL_PIN 22          // I2C Clock line (default for ESP32)
 
-// ========================================
-// SENSOR PINS
-// ========================================
-// Analog Pressure Sensors (FSR)
-#define PRESSURE_PIN_1 34   // Proximal bladder
-#define PRESSURE_PIN_2 35   // Middle bladder
-#define PRESSURE_PIN_3 36   // Distal bladder
+// TMP117 I2C Address
+#define TMP117_I2C_ADDRESS 0x48 // Default address (can be 0x49 if ADD0 pin high)
 
-// Sodium Sensor (Analog)
-#define SODIUM_PIN 39       // Potentiometric sodium sensor
+// ============================================================================
+// ANALOG INPUTS (Pressure Sensors - FSR 402)
+// ============================================================================
+// ESP32 has 12-bit ADC (0-4095 range)
+// Use ADC1 pins (ADC2 pins conflict with WiFi, avoid them)
 
-// ========================================
-// I2C PINS (TMP117 Temperature Sensor)
-// ========================================
-#define SDA_PIN 21   // I2C Data line
-#define SCL_PIN 22   // I2C Clock line
+#define PRESSURE_SENSOR_1_PIN 36  // VP (ADC1_CH0) - Proximal bladder
+#define PRESSURE_SENSOR_2_PIN 39  // VN (ADC1_CH3) - Middle bladder  
+#define PRESSURE_SENSOR_3_PIN 34  // ADC1_CH6 - Distal bladder
 
-// ========================================
-// OTHER PINS
-// ========================================
-#define LED_BUILTIN 2   // Built-in LED (for status indication)
-
-#endif // PINS_H
-```
 
