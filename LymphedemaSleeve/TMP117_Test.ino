@@ -94,8 +94,6 @@ void setup() {
   while (!Serial) delay(10);  // Wait for Serial to connect
   
   Serial.println("===========================================");
-  Serial.println("TMP117 Temperature Sensor Test with Smoothing");
-  Serial.println("Person A (Dani) - Tasks 2 & 3");
   Serial.println("===========================================\n");
   
   // Initialize I2C with defined pins
