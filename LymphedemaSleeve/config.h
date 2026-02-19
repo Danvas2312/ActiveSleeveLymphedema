@@ -1,123 +1,80 @@
+// config.h
+// Central configuration file for LymphedemaSleeve
+// Group 10 - Biomedical Senior Design
+// 
+// PURPOSE: All tunable constants live here.
+// If you need to adjust a threshold, change it HERE only.
+
 #ifndef CONFIG_H
 #define CONFIG_H
 
-// ============================================================================
-// SYSTEM CONFIGURATION
-// ============================================================================
+// ========================================
+// TEMPERATURE THRESHOLDS
+// Source: Design Specifications Document, Section 2
+// These are deviations ABOVE the patient's baseline
+// ========================================
+#define TEMP_THRESHOLD_POSSIBLE   1.0   // +1.0°C above baseline = possible swelling
+#define TEMP_THRESHOLD_LIKELY     2.0   // +2.0°C above baseline = likely swelling
+#define TEMP_THRESHOLD_SIGNIFICANT 3.0  // +3.0°C above baseline = significant swelling
 
-// Calibration Settings
-#define CALIBRATION_SAMPLES 20          // Number of samples for baseline averaging
-#define CALIBRATION_DELAY_MS 100        // Delay between calibration samples (ms)
-
-// Main Loop Timing
-#define SENSOR_READ_INTERVAL_MS 1000    // How often to read sensors (1 second)
-#define MONITORING_INTERVAL_MS 5000     // How often to check for swelling (5 seconds)
-
-// ============================================================================
-// TEMPERATURE THRESHOLDS (from your document [1])
-// ============================================================================
-
-// Normal skin temperature range: 30-34°C
-#define TEMP_NORMAL_MIN 30.0            // Minimum normal temperature (°C)
-#define TEMP_NORMAL_MAX 34.0            // Maximum normal temperature (°C)
-
-// Temperature deviation thresholds (relative to baseline)
-#define TEMP_THRESHOLD_POSSIBLE 1.0     // +1.0°C = Possible swelling
-#define TEMP_THRESHOLD_LIKELY 2.0       // +2.0°C = Likely swelling
-#define TEMP_THRESHOLD_SIGNIFICANT 3.0  // +3.0°C = Significant swelling
-
-// Active threshold for triggering compression
-#define TEMP_TRIGGER_THRESHOLD TEMP_THRESHOLD_LIKELY  // Use "likely" as trigger point
-
-// ============================================================================
+// ========================================
 // PRESSURE THRESHOLDS
-// ============================================================================
+// Logic: Swelling = tighter fit = HIGHER pressure than baseline
+// Units: Raw ADC value deviation (0-4095 on ESP32's 12-bit ADC)
+// NOTE: These will need tuning once you test with the physical sleeve.
+//       Start with 10% above baseline as your trigger point.
+// ========================================
+#define PRESSURE_THRESHOLD_PERCENT  0.10  // 10% above baseline triggers detection
+                                          // e.g., if baseline = 1000, trigger at 1100
 
-// Target compression pressure
-#define TARGET_PRESSURE_MMHG 40.0       // Target therapeutic pressure (mmHg)
+// ========================================
+// CALIBRATION SETTINGS
+// ========================================
+#define CALIBRATION_SAMPLES     20      // Number of samples to average for baseline
+                                        // Matches Figure 7 in your design doc
+#define CALIBRATION_DELAY_MS    150     // Milliseconds between each calibration sample
+                                        // 20 samples x 150ms = 3 seconds total
 
-// Pressure sensor calibration (will be determined during testing)
-#define PRESSURE_SENSOR_MIN_READING 0   // ADC value at 0 mmHg
-#define PRESSURE_SENSOR_MAX_READING 4095 // ADC value at max pressure (12-bit ADC)
-#define PRESSURE_MAX_MMHG 100.0         // Maximum pressure the sensor can read
+// ========================================
+// COMPRESSION TARGET
+// Source: Design Specifications Document, Section 5b
+// ========================================
+#define TARGET_PRESSURE_MMHG    40      // Target therapeutic compression pressure
+                                        // Used by Person B in pneumatics control
 
-// Swelling detection via pressure (Option 1: Increased contact pressure)
-// When arm swells, sleeve gets tighter, FSR reads higher
-#define PRESSURE_DEVIATION_THRESHOLD 5.0 // mmHg above baseline suggests swelling
+// ========================================
+// SENSOR SMOOTHING
+// We take multiple readings and average them to reduce electrical noise
+// ========================================
+#define SMOOTH_SAMPLES          5       // Number of readings to average per sensor cycle
+#define SMOOTH_DELAY_MS         10      // Milliseconds between smoothing samples
 
-// Safety limits
-#define PRESSURE_SAFETY_MAX 60.0        // Never exceed this pressure (mmHg)
-#define PRESSURE_TOLERANCE 5.0          // Acceptable deviation from target (mmHg)
+// Temperature Filter Settings (for moving average)
+#define TEMP_FILTER_SIZE        10      // Number of samples for temperature smoothing
+#define SENSOR_READ_INTERVAL_MS 500     // Read sensors every 500ms (2 Hz)
 
-// ============================================================================
-// COMPRESSION CYCLE PARAMETERS
-// ============================================================================
+// Temperature Normal Range (for baseline reference)
+#define TEMP_NORMAL_MIN         30.0    // Minimum normal skin temperature (Celsius)
+#define TEMP_NORMAL_MAX         34.0    // Maximum normal skin temperature (Celsius)
 
-// Three-phase cycle: INFLATE → HOLD → RELEASE
-#define INFLATE_TIMEOUT_MS 30000        // Max time to reach target pressure (30 sec)
-#define HOLD_DURATION_MS 10000          // Hold pressure for 10 seconds
-#define RELEASE_DURATION_MS 5000        // Release pressure for 5 seconds
-#define COOLDOWN_DURATION_MS 60000      // Wait 60 seconds before next cycle
+// ========================================
+// COOLDOWN PERIOD
+// After a compression cycle, wait before monitoring again
+// ========================================
+#define COOLDOWN_DURATION_MS    30000   // 30 seconds cooldown after each compression
 
-// Pump control - How the cycle acts
-#define PUMP_PWM_FREQUENCY 5000         // PWM frequency for pump (Hz)
-#define PUMP_PWM_RESOLUTION 8           // 8-bit resolution (0-255)
-#define PUMP_PWM_INITIAL 180            // Starting PWM duty cycle (0-255)
-#define PUMP_PWM_MAX 255                // Maximum PWM duty cycle
+// ========================================
+// ESP32 ADC SETTINGS
+// The ESP32 has a 12-bit ADC (values 0 - 4095)
+// Operating voltage: 3.3V
+// ========================================
+#define ADC_MAX_VALUE           4095    // 12-bit ADC max
+#define ADC_REFERENCE_VOLTAGE   3.3     // Volts
 
-// ============================================================================
-// DATA SMOOTHING & FILTERING
-// ============================================================================
-
-// Moving average filter sizes
-#define TEMP_FILTER_SIZE 5              // Average last 5 temperature readings
-#define PRESSURE_FILTER_SIZE 3          // Average last 3 pressure readings per sensor
-
-// Noise rejection
-#define TEMP_MAX_CHANGE_PER_READING 2.0 // Reject readings that change more than 2°C
-#define PRESSURE_MAX_CHANGE 10.0        // Reject pressure spikes > 10 mmHg
-
-// ============================================================================
-// BLUETOOTH CONFIGURATION
-// ============================================================================
-
-#define BT_DEVICE_NAME "LymphSleeve_G10" // Bluetooth device name
-#define BT_BAUD_RATE 115200              // Serial baud rate
-#define BT_UPDATE_INTERVAL_MS 2000       // Send BT updates every 2 seconds
-
-// ============================================================================
-// EEPROM ADDRESSES (for storing baseline values)
-// ============================================================================
-
-#define EEPROM_SIZE 64                   // Allocate 64 bytes for EEPROM
-#define ADDR_TEMP_BASELINE 0             // Address for temperature baseline (4 bytes)
-#define ADDR_PRESSURE1_BASELINE 4        // Address for pressure sensor 1 (4 bytes)
-#define ADDR_PRESSURE2_BASELINE 8        // Address for pressure sensor 2 (4 bytes)
-#define ADDR_PRESSURE3_BASELINE 12       // Address for pressure sensor 3 (4 bytes)
-#define ADDR_CALIBRATION_FLAG 16         // Flag to check if calibration exists (1 byte)
-
-// Calibration validity flag
-#define CALIBRATION_VALID_FLAG 0xAA      // Magic number indicating valid calibration
-
-// ============================================================================
-// DEBUG & TESTING FLAGS
-// ============================================================================
-
-// Set to 1 to enable debug output to Serial Monitor
-#define DEBUG_MODE 1
-
-// Individual debug flags
-#define DEBUG_SENSORS 1                  // Print sensor readings
-#define DEBUG_CALIBRATION 1              // Print calibration process
-#define DEBUG_DECISION_LOGIC 1           // Print swelling detection decisions
-#define DEBUG_PNEUMATICS 1               // Print pump/valve control
-#define DEBUG_STATE_MACHINE 1            // Print state transitions
-
-// ============================================================================
-// HARDWARE SAFETY
-// ============================================================================
-
-#define WATCHDOG_TIMEOUT_MS 8000         // Reset if loop hangs for 8 seconds
-#define MAX_CONSECUTIVE_ERRORS 3         // Max sensor read errors before safe shutdown
+// ========================================
+// SERIAL MONITOR
+// ========================================
+#define SERIAL_BAUD_RATE        115200  // Must match Serial.begin() in .ino file
+#define PRINT_INTERVAL_MS       1000    // Print sensor readings every 1 second
 
 #endif // CONFIG_H
