@@ -1,12 +1,13 @@
-* TMP117_Test.ino
+/*
+ * TMP117_Test.ino
  * Test sketch for TMP117 temperature sensor with data smoothing
  * 
  * 
  * Hardware Setup:
- * - TMP117 SDA → ESP32 GPIO 21 (default I2C SDA)
- * - TMP117 SCL → ESP32 GPIO 22 (default I2C SCL)
- * - TMP117 VCC → ESP32 3.3V
- * - TMP117 GND → ESP32 GND
+ * - TMP117 SDA --> ESP32 GPIO 21 (default I2C SDA)
+ * - TMP117 SCL --> ESP32 GPIO 22 (default I2C SCL)
+ * - TMP117 VCC --> ESP32 3.3V
+ * - TMP117 GND --> ESP32 GND
  * 
  * See Wiring_Guide.md for detailed connection instructions
  * 
@@ -134,7 +135,7 @@ void loop() {
   sensors_event_t temp_event;
   tmp117.getEvent(&temp_event);
   
-  float rawTemp = temp_event.temperature;  // Temperature in °C
+  float rawTemp = temp_event.temperature;  // Temperature in Celsius
   
   // Add reading to filter
   tempFilter.addReading(rawTemp);
@@ -145,9 +146,9 @@ void loop() {
   // Print results
   Serial.print("Raw: ");
   Serial.print(rawTemp, 2);  // 2 decimal places
-  Serial.print(" °C  |  Smoothed: ");
+  Serial.print(" C  |  Smoothed: ");
   Serial.print(smoothedTemp, 2);
-  Serial.print(" °C  |  ");
+  Serial.print(" C  |  ");
   
   // Status indicator
   if (tempFilter.isReady()) {
@@ -155,11 +156,11 @@ void loop() {
     
     // Check if temperature is in normal range
     if (smoothedTemp >= TEMP_NORMAL_MIN && smoothedTemp <= TEMP_NORMAL_MAX) {
-      Serial.println(" ✓ Normal Range");
+      Serial.println(" [OK] Normal Range");
     } else if (smoothedTemp < TEMP_NORMAL_MIN) {
-      Serial.println(" ⚠ Below Normal");
+      Serial.println(" [!] Below Normal");
     } else {
-      Serial.println(" ⚠ Above Normal");
+      Serial.println(" [!] Above Normal");
     }
   } else {
     Serial.println("Warming up...");
