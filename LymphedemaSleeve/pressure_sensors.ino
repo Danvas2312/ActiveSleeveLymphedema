@@ -39,7 +39,6 @@ void setup() {
   
   Serial.println("\n\n========================================");
   Serial.println("  PRESSURE SENSOR SYSTEM");
-  Serial.println("  Person A (Dani) - Week 2");
   Serial.println("========================================\n");
   
   // Initialize EEPROM
@@ -75,7 +74,7 @@ void setup() {
     Serial.println("✓ Pressure baseline loaded!\n");
     isCalibrated = true;
   } else {
-    Serial.println("⚠ No pressure baseline found");
+    Serial.println("No pressure baseline found");
     Serial.println("  Press 'C' to calibrate\n");
   }
   
@@ -249,7 +248,7 @@ void savePressureBaselineToEEPROM(float baseline) {
   
   // Validate baseline before saving
   if (baseline < 0 || baseline > 4095) {
-    Serial.println("✗ ERROR: Invalid baseline value!");
+    Serial.println("ERROR: Invalid baseline value!");
     return;
   }
   
@@ -262,7 +261,7 @@ void savePressureBaselineToEEPROM(float baseline) {
   // Commit
   EEPROM.commit();
   
-  Serial.println("✓ Pressure baseline saved!");
+  Serial.println(" Pressure baseline saved!");
   Serial.print("  Pressure: ");
   Serial.print((int)baseline);
   Serial.println(" (ADC)");
@@ -285,13 +284,13 @@ bool loadPressureBaselineFromEEPROM() {
     
     // Validate loaded baseline
     if (baseline < 0 || baseline > 4095) {
-      Serial.println("✗ Corrupted baseline data!");
+      Serial.println("Corrupted baseline data!");
       return false;
     }
     
     pressureBaseline = baseline;
     
-    Serial.println("✓ Valid pressure calibration found!");
+    Serial.println(" Valid pressure calibration found!");
     Serial.print("  Pressure baseline: ");
     Serial.print((int)pressureBaseline);
     Serial.println(" (ADC)");
@@ -299,7 +298,7 @@ bool loadPressureBaselineFromEEPROM() {
     
     return true;
   } else {
-    Serial.println("✗ No valid calibration found");
+    Serial.println(" No valid calibration found");
     Serial.print("  Flag: 0x");
     Serial.print(flag, HEX);
     Serial.print(" (expected 0x");
@@ -320,7 +319,7 @@ void clearEEPROM() {
   EEPROM.write(ADDR_CALIBRATION_FLAG, 0x00);
   EEPROM.commit();
   
-  Serial.println("✓ Calibration cleared\n");
+  Serial.println("Calibration cleared\n");
 }
 
 // ============================================================================
@@ -343,11 +342,11 @@ void monitorPressure() {
   
   // Check threshold
   if (abs(deviation) < PRESSURE_DEVIATION_THRESHOLD * 0.5) {
-    Serial.println("✓ Normal");
+    Serial.println("Normal");
   } else if (abs(deviation) < PRESSURE_DEVIATION_THRESHOLD) {
-    Serial.println("⚠ Elevated");
+    Serial.println("Elevated");
   } else {
-    Serial.println("⚠⚠ High pressure!");
+    Serial.println(" High pressure!");
   }
 }
 
@@ -416,7 +415,7 @@ void handleCommand(char cmd) {
       break;
       
     default:
-      Serial.println("✗ Unknown command - Press 'M'\n");
+      Serial.println(" Unknown command - Press 'M'\n");
       break;
   }
 }
@@ -472,7 +471,7 @@ void displayDetailedReadings() {
  */
 void testDetection() {
   if (!isCalibrated) {
-    Serial.println("✗ Not calibrated - Press 'C' first\n");
+    Serial.println("Not calibrated - Press 'C' first\n");
     return;
   }
   
@@ -496,11 +495,11 @@ void testDetection() {
   
   Serial.println("\nResult:");
   if (abs(dev) >= PRESSURE_DEVIATION_THRESHOLD) {
-    Serial.println("  ⚠⚠ PRESSURE ALERT!");
+    Serial.println("   PRESSURE ALERT!");
     Serial.println("  → Swelling possible");
   } else {
-    Serial.println("  ✓ NORMAL");
-    Serial.println("  → Continue monitoring");
+    Serial.println("  NORMAL");
+    Serial.println("   Continue monitoring");
   }
   
   Serial.println("========================================\n");
@@ -515,7 +514,7 @@ void showStatus() {
   Serial.println("========================================");
   
   Serial.print("Calibration: ");
-  Serial.println(isCalibrated ? "✓ CALIBRATED" : "✗ NOT CALIBRATED");
+  Serial.println(isCalibrated ? " CALIBRATED" : " NOT CALIBRATED");
   
   if (isCalibrated) {
     Serial.print("  Baseline: ");
@@ -553,7 +552,7 @@ void showMenu() {
   if (isCalibrated) {
     Serial.println("Status: ✓ CALIBRATED");
   } else {
-    Serial.println("Status: ⚠ NOT CALIBRATED (showing raw)");
+    Serial.println("Status:  NOT CALIBRATED (showing raw)");
   }
   
   Serial.println("========================================\n");
