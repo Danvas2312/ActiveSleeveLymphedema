@@ -135,29 +135,35 @@ void loop() {
   sensors_event_t temp_event;
   tmp117.getEvent(&temp_event);
   
-  float rawTemp = temp_event.temperature;  // Temperature in Celsius
+  float rawTemp_C = temp_event.temperature;
+  float rawTemp_F = celsiusToFahrenheit(rawTemp_C);
   
-  // Add reading to filter
-  tempFilter.addReading(rawTemp);
+  // Add to filter
+  tempFilter.addReading(rawTemp_C);
   
-  // Get smoothed value
-  float smoothedTemp = tempFilter.getSmoothed();
+  // Get smoothed values
+  float smoothedTemp_C = tempFilter.getSmoothed();
+  float smoothedTemp_F = celsiusToFahrenheit(smoothedTemp_C);
   
-  // Print results
-  Serial.print("Raw: ");
-  Serial.print(rawTemp, 2);  // 2 decimal places
-  Serial.print(" C  |  Smoothed: ");
-  Serial.print(smoothedTemp, 2);
-  Serial.print(" C  |  ");
+  // Print BOTH units
+  Serial.print(rawTemp_C, 2);
+  Serial.print(" C / ");
+  Serial.print(rawTemp_F, 2);
+  Serial.print(" F  |  ");
+  
+  Serial.print(smoothedTemp_C, 2);
+  Serial.print(" C / ");
+  Serial.print(smoothedTemp_F, 2);
+  Serial.print(" F  |  ");
   
   // Status indicator
   if (tempFilter.isReady()) {
     Serial.print("READY");
     
-    // Check if temperature is in normal range
-    if (smoothedTemp >= TEMP_NORMAL_MIN && smoothedTemp <= TEMP_NORMAL_MAX) {
+    // Check if temperature is in normal range (ALL variables need _C!)
+    if (smoothedTemp_C >= TEMP_NORMAL_MIN && smoothedTemp_C <= TEMP_NORMAL_MAX) {
       Serial.println(" [OK] Normal Range");
-    } else if (smoothedTemp < TEMP_NORMAL_MIN) {
+    } else if (smoothedTemp_C < TEMP_NORMAL_MIN) {
       Serial.println(" [!] Below Normal");
     } else {
       Serial.println(" [!] Above Normal");
@@ -190,4 +196,33 @@ float getCurrentTemperature() {
  */
 bool isTemperatureSensorReady() {
   return tempFilter.isReady();
+}
+
+/**
+ * Convert temperature from Celsius to Fahrenheit
+ * Formula: F = (C × 9/5) + 32
+ */
+float celsiusToFahrenheit(float celsius) {
+  return (celsius * 9.0 / 5.0) + 32.0;
+}
+
+/**
+ * Get current smoothed temperature in Fahrenheit
+ */
+float getCurrentTemperatureFahrenheit() {
+  return celsiusToFahrenheit(getCurrentTemperature());
+}
+
+/**
+ * Print temperature in both Celsius and Fahrenheit
+ */
+void printTemperatureInBoth() {
+  float tempC = getCurrentTemperature();
+  float tempF = celsiusToFahrenheit(tempC);
+  
+  Serial.print("Temperature: ");
+  Serial.print(tempC, 2);
+  Serial.print(" C  |  ");
+  Serial.print(tempF, 2);
+  Serial.println(" F");
 }
