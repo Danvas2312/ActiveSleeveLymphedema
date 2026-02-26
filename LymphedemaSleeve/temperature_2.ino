@@ -1,6 +1,6 @@
 /*
  * TMP117_Test.ino
- * Test sketch for TMP117 temperature sensor with data smoothing
+ * Test sketch for TMP117 temperature sensor with data smoothing - No use this one
  * 
  * 
  * Hardware Setup:
