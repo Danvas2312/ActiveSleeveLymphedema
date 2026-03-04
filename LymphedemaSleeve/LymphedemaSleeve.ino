@@ -1,68 +1,280 @@
 /*
- * LymphedemaSleeve - Main Firmware
- * Group 10 - BMEG
+ * LymphedemaSleeve.ino
+ * Main Firmware - Group 10
+ * BMEG 48103 Biomedical Senior Design
+ *
+ * State Machine:
+ *   INIT       Setup all hardware and communication
+ *   CALIBRATE  Capture baseline temperature and pressure
+ *   MONITOR    Continuously read sensors, check thresholds
+ *   COMPRESS   Trigger compression cycle (OR logic)
+ *   COOLDOWN   Wait 30 seconds before resuming monitoring
+ *
+ * Trigger Logic (OR):
+ *   Compression fires if EITHER:
+ *     - Temperature rises >= TEMP_THRESHOLD_POSSIBLE (+1.0 C above baseline)
+ *     - Pressure rises   >= PRESSURE_DEVIATION_THRESHOLD above baseline
  */
 
+#include <Wire.h>
+#include <Adafruit_TMP117.h>
+#include <EEPROM.h>
 #include "pins.h"
+#include "config.h"
 
-// ========================================
+// ============================================================================
+// STATE MACHINE
+// ============================================================================
+enum SystemState {
+  STATE_INIT,
+  STATE_CALIBRATE,
+  STATE_MONITOR,
+  STATE_COMPRESS,
+  STATE_COOLDOWN
+};
+
+SystemState currentState = STATE_INIT;
+
+// ============================================================================
+// GLOBAL SENSOR OBJECTS
+// ============================================================================
+Adafruit_TMP117 tmp117;
+
+// ============================================================================
 // GLOBAL VARIABLES
-// ========================================
-unsigned long lastPrint = 0;
-int counter = 0;
+// ============================================================================
 
-// ========================================
-// SETUP - Runs once at startup
-// ========================================
+// Temperature
+float tempBaseline   = 0.0;
+float currentTemp    = 0.0;
+bool  tempTriggered  = false;
+
+// Pressure
+float pressureBaseline  = 0.0;
+float currentPressure   = 0.0;
+bool  pressureTriggered = false;
+
+// Timing
+unsigned long cooldownStart  = 0;
+unsigned long lastSensorRead = 0;
+
+// ============================================================================
+// SETUP
+// ============================================================================
 void setup() {
-  // Initialize serial communication
-  Serial.begin(115200);
+  Serial.begin(SERIAL_BAUD_RATE);
   delay(1000);
-  
-  // Print startup message
+
   Serial.println("========================================");
-  Serial.println("LymphedemaSleeve - Initialization");
-  Serial.println("Group 10 - Biomedical Senior Design");
+  Serial.println("  LymphedemaSleeve - Initialization");
+  Serial.println("  Group 10 - Biomedical Senior Design");
   Serial.println("========================================");
-  
-  // Configure motor driver pins as outputs
-  pinMode(AIN1, OUTPUT);
-  pinMode(AIN2, OUTPUT);
-  pinMode(PWMA, OUTPUT);
-  pinMode(BIN1, OUTPUT);
-  pinMode(BIN2, OUTPUT);
-  pinMode(PWMB, OUTPUT);
-  
-  // Configure built-in LED as output
+
+  // Motor driver pins
+  pinMode(AIN1, OUTPUT); pinMode(AIN2, OUTPUT); pinMode(PWMA, OUTPUT);
+  pinMode(BIN1, OUTPUT); pinMode(BIN2, OUTPUT); pinMode(PWMB, OUTPUT);
+
+  // Safe initial state: pump off, solenoid closed
+  digitalWrite(AIN1, LOW); digitalWrite(AIN2, LOW); analogWrite(PWMA, 0);
+  digitalWrite(BIN1, LOW); digitalWrite(BIN2, LOW); analogWrite(PWMB, 0);
+
+  // LED
   pinMode(LED_BUILTIN, OUTPUT);
-  
-  // Configure sensor pins as inputs
+
+  // Pressure sensor pins (GPIO 34, 35, 36 are input-only on ESP32)
   pinMode(PRESSURE_PIN_1, INPUT);
   pinMode(PRESSURE_PIN_2, INPUT);
   pinMode(PRESSURE_PIN_3, INPUT);
-  pinMode(SODIUM_PIN, INPUT);
-  
-  Serial.println("✓ All pins configured");
-  Serial.println("✓ System initialized");
-  Serial.println("========================================");
+
+  // ADC resolution
+  analogReadResolution(12);
+
+  // I2C + TMP117
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  if (!tmp117.begin()) {
+    Serial.println("ERROR: TMP117 not found! Check wiring.");
+    Serial.println("  SDA -> GPIO 21  SCL -> GPIO 22");
+    while (1) delay(500);
+  }
+
+  // EEPROM
+  EEPROM.begin(EEPROM_SIZE);
+
+  Serial.println("All hardware initialized.");
+  Serial.println("========================================\n");
+
+  currentState = STATE_CALIBRATE;
 }
 
-// ========================================
-// MAIN LOOP - Runs continuously
-// ========================================
+// ============================================================================
+// MAIN LOOP - State Machine
+// ============================================================================
 void loop() {
-  // Blink LED and print message every second
-  unsigned long currentTime = millis();
-  
-  if (currentTime - lastPrint >= 1000) {
-    // Toggle LED
+  switch (currentState) {
+    case STATE_CALIBRATE:
+      runCalibration();
+      currentState = STATE_MONITOR;
+      break;
+    case STATE_MONITOR:
+      runMonitor();
+      break;
+    case STATE_COMPRESS:
+      runCompression();
+      cooldownStart = millis();
+      currentState  = STATE_COOLDOWN;
+      break;
+    case STATE_COOLDOWN:
+      runCooldown();
+      break;
+    default:
+      currentState = STATE_CALIBRATE;
+      break;
+  }
+
+  // Heartbeat LED
+  static unsigned long lastBlink = 0;
+  if (millis() - lastBlink > 1000) {
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    
-    // Print status
-    counter++;
-    Serial.print("System running... count: ");
-    Serial.println(counter);
-    
-    lastPrint = currentTime;
+    lastBlink = millis();
+  }
+}
+
+// ============================================================================
+// STATE: CALIBRATE
+// Captures baseline temp and pressure using 20-sample averaging (Figure 7)
+// ============================================================================
+void runCalibration() {
+  Serial.println("========================================");
+  Serial.println("[CALIBRATE] Capturing patient baseline...");
+  Serial.println("  Keep sleeve relaxed and arm still.");
+  Serial.println("  Sampling for ~3 seconds...");
+  Serial.println("========================================\n");
+
+  float tempSum = 0.0;
+  for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+    sensors_event_t event;
+    tmp117.getEvent(&event);
+    tempSum += event.temperature;
+    delay(CALIBRATION_DELAY_MS);
+  }
+  tempBaseline = tempSum / CALIBRATION_SAMPLES;
+
+  float pressureSum = 0.0;
+  for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+    float p1 = analogRead(PRESSURE_PIN_1);
+    float p2 = analogRead(PRESSURE_PIN_2);
+    float p3 = analogRead(PRESSURE_PIN_3);
+    pressureSum += (p1 + p2 + p3) / 3.0;
+    delay(CALIBRATION_DELAY_MS);
+  }
+  pressureBaseline = pressureSum / CALIBRATION_SAMPLES;
+
+  Serial.print("[CALIBRATE] Temperature baseline: ");
+  Serial.print(tempBaseline, 2); Serial.println(" C");
+  Serial.print("[CALIBRATE] Pressure baseline:    ");
+  Serial.print((int)pressureBaseline); Serial.println(" ADC");
+  Serial.println("[CALIBRATE] Complete. Entering monitoring mode.\n");
+}
+
+// ============================================================================
+// STATE: MONITOR
+// Reads sensors and checks OR trigger logic
+// ============================================================================
+void runMonitor() {
+  unsigned long now = millis();
+  if (now - lastSensorRead < SENSOR_READ_INTERVAL_MS) return;
+  lastSensorRead = now;
+
+  // Read temperature
+  sensors_event_t event;
+  tmp117.getEvent(&event);
+  currentTemp = event.temperature;
+  float tempDelta = currentTemp - tempBaseline;
+
+  // Read pressure (average of 3 sensors)
+  float p1 = analogRead(PRESSURE_PIN_1);
+  float p2 = analogRead(PRESSURE_PIN_2);
+  float p3 = analogRead(PRESSURE_PIN_3);
+  currentPressure = (p1 + p2 + p3) / 3.0;
+  float pressureDelta = currentPressure - pressureBaseline;
+
+  Serial.print("[MONITOR] Temp: ");
+  Serial.print(currentTemp, 2);
+  Serial.print(" C (D:");
+  if (tempDelta >= 0) Serial.print("+");
+  Serial.print(tempDelta, 2);
+  Serial.print(") | Pressure: ");
+  Serial.print((int)currentPressure);
+  Serial.print(" ADC (D:");
+  if (pressureDelta >= 0) Serial.print("+");
+  Serial.print((int)pressureDelta);
+  Serial.print(") | ");
+
+  // OR trigger logic
+  tempTriggered     = (tempDelta     >= TEMP_THRESHOLD_POSSIBLE);
+  pressureTriggered = (pressureDelta >= PRESSURE_DEVIATION_THRESHOLD);
+
+  if (tempTriggered || pressureTriggered) {
+    Serial.println("SWELLING SIGNAL - triggering compression");
+    if (tempTriggered)     Serial.println("  -> Temperature threshold exceeded");
+    if (pressureTriggered) Serial.println("  -> Pressure threshold exceeded");
+    currentState = STATE_COMPRESS;
+  } else {
+    Serial.println("Normal");
+  }
+}
+
+// ============================================================================
+// STATE: COMPRESS
+// Runs one full inflate -> hold -> release cycle
+// ============================================================================
+void runCompression() {
+  Serial.println("\n========================================");
+  Serial.println("[COMPRESS] Starting compression cycle");
+  Serial.println("========================================");
+
+  // Phase 1: Inflate
+  Serial.println("[COMPRESS] Phase 1: Inflating...");
+  digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW);
+  analogWrite(PWMA, 150);
+  digitalWrite(BIN1, LOW);  digitalWrite(BIN2, LOW);
+  analogWrite(PWMB, 0);
+  delay(5000);
+
+  // Phase 2: Hold
+  Serial.println("[COMPRESS] Phase 2: Holding pressure...");
+  analogWrite(PWMA, 0);
+  digitalWrite(AIN1, LOW);
+  delay(3000);
+
+  // Phase 3: Release
+  Serial.println("[COMPRESS] Phase 3: Releasing pressure...");
+  digitalWrite(BIN1, HIGH); digitalWrite(BIN2, LOW);
+  analogWrite(PWMB, 255);
+  delay(4000);
+
+  // Safe state
+  digitalWrite(BIN1, LOW); analogWrite(PWMB, 0);
+
+  Serial.println("[COMPRESS] Cycle complete.\n");
+}
+
+// ============================================================================
+// STATE: COOLDOWN
+// Waits 30 seconds before returning to monitoring
+// ============================================================================
+void runCooldown() {
+  unsigned long elapsed = millis() - cooldownStart;
+  static unsigned long lastPrint = 0;
+  if (millis() - lastPrint >= 5000) {
+    int remaining = (COOLDOWN_DURATION_MS - elapsed) / 1000;
+    Serial.print("[COOLDOWN] Resuming in ");
+    Serial.print(remaining);
+    Serial.println("s...");
+    lastPrint = millis();
+  }
+  if (elapsed >= COOLDOWN_DURATION_MS) {
+    Serial.println("[COOLDOWN] Complete. Returning to monitoring.\n");
+    currentState = STATE_MONITOR;
   }
 }
