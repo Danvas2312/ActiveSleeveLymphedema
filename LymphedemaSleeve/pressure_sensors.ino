@@ -395,3 +395,5 @@ void showMenu() {
   Serial.print("  Status: ");
   Serial.println(isCalibrated ? "CALIBRATED" : "NOT CALIBRATED - press C");
   Serial.println("========================================\n");
+}
+
