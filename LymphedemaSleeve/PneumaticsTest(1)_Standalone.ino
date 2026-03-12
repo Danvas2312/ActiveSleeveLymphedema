@@ -54,14 +54,14 @@
 // PIN DEFINITIONS (from pins.h)
 // ============================================================================
 // Motor Driver TB6612FNG - Channel A (Pump)
-#define AIN1 25   // Pump direction control 1
-#define AIN2 26   // Pump direction control 2
-#define PWMA 27   // Pump speed control (PWM)
+#define AIN1 27   // Pump direction control 1
+#define AIN2 14   // Pump direction control 2
+#define PWMA 12   // Pump speed control (PWM)
 
 // Motor Driver TB6612FNG - Channel B (Solenoid)
-#define BIN1 32   // Solenoid control 1
-#define BIN2 33   // Solenoid control 2
-#define PWMB 14   // Solenoid control (PWM)
+#define BIN1 33   // Solenoid control 1
+#define BIN2 25   // Solenoid control 2
+#define PWMB 26   // Solenoid control (PWM)
 
 // Status LED
 #define LED_BUILTIN 2
