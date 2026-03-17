@@ -239,13 +239,13 @@ void runCompression() {
   analogWrite(PWMA, 150);
   digitalWrite(BIN1, LOW);  digitalWrite(BIN2, LOW);
   analogWrite(PWMB, 0);
-  delay(5000);
+  delay(30000);
 
   // Phase 2: Hold
   Serial.println("[COMPRESS] Phase 2: Holding pressure...");
   analogWrite(PWMA, 0);
   digitalWrite(AIN1, LOW);
-  delay(3000);
+  delay(5000;
 
   // Phase 3: Release
   Serial.println("[COMPRESS] Phase 3: Releasing pressure...");
