@@ -59,12 +59,13 @@
 // EEPROM STORAGE
 // Used to persist baseline calibration across power cycles
 // Address map:
-//   0-3   : reserved
+//   0-3   : temperature baseline (float, 4 bytes)
 //   4-7   : pressure baseline (float, 4 bytes)
 //   8-15  : reserved for future use
 //   16    : calibration valid flag
 // ========================================
 #define EEPROM_SIZE             32     // Total bytes allocated
+#define ADDR_TEMP_BASELINE       0     // EEPROM address for temperature baseline float
 #define ADDR_PRESSURE_BASELINE   4     // EEPROM address for pressure baseline float
 #define ADDR_CALIBRATION_FLAG   16     // EEPROM address for valid flag byte
 #define CALIBRATION_VALID_FLAG  0xAB   // Magic number — confirms valid calibration exists
