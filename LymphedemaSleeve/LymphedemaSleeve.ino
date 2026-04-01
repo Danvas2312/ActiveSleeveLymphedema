@@ -1,6 +1,10 @@
 /*
  * LymphedemaSleeve.ino
- * Main Firmware
+ * Main Firmware 
+ * ============================================================
+ * EXPO-READY VERSION - WITH EMERGENCY STOP
+ * April 23rd - Senior Design Expo
+ * ============================================================
  *
  * BYPASS FLAG:
  *   true  = Temperature only (current mode - FSRs not yet calibrated)
@@ -16,6 +20,12 @@
  *   Compression fires if EITHER:
  *     - Temperature rises >= +1.0°C above baseline
  *     - Pressure rises   >= PRESSURE_DEVIATION_THRESHOLD above baseline
+ *
+ * Serial Commands (115200 baud):
+ *   e - Emergency stop (pump off + solenoid open + halt)
+ *   r - Resume monitoring after emergency stop
+ *   s - Print current system status
+ *   h - Show this help menu
  */
 
 #include <Wire.h>
@@ -33,16 +43,16 @@
 // ============================================================================
 // mmHg CALIBRATION TABLE
 // ============================================================================
-// Replace ADC values with YOUR actual measured values using penny weights
+// Replace ADC values with YOUR actual penny weight measurements.
 // Format: {ADC_value, mmHg_value}
-// ADC values MUST increase as mmHg increases
+// ADC values MUST increase as mmHg increases.
 // ============================================================================
 float CAL_TABLE[][2] = {
-  {0,    0},   // 0 mmHg  → replace with your measured ADC at 0 mmHg
-  {100,  10},  // 10 mmHg → replace with your measured ADC at 10 mmHg
-  {300,  20},  // 20 mmHg → replace with your measured ADC at 20 mmHg
-  {600,  30},  // 30 mmHg → replace with your measured ADC at 30 mmHg
-  {1000, 40}   // 40 mmHg → replace with your measured ADC at 40 mmHg
+  {0,    0},   // 0 mmHg  → replace with your measured ADC
+  {100,  10},  // 10 mmHg → replace with your measured ADC
+  {300,  20},  // 20 mmHg → replace with your measured ADC
+  {600,  30},  // 30 mmHg → replace with your measured ADC
+  {1000, 40}   // 40 mmHg → replace with your measured ADC
 };
 const int CAL_TABLE_SIZE = 5;
 
@@ -53,7 +63,8 @@ enum SystemState {
   STATE_CALIBRATE,
   STATE_MONITOR,
   STATE_COMPRESS,
-  STATE_COOLDOWN
+  STATE_COOLDOWN,
+  STATE_STOPPED     // Emergency stop state
 };
 
 SystemState currentState = STATE_CALIBRATE;
@@ -73,6 +84,9 @@ bool  pressureTriggered = false;
 
 unsigned long cooldownStart  = 0;
 unsigned long lastSensorRead = 0;
+
+// Cycle counter
+int compressionCycleCount = 0;
 
 // ============================================================================
 // HELPER: Celsius to Fahrenheit
@@ -101,6 +115,118 @@ float adcToMmHg(float adcValue) {
 }
 
 // ============================================================================
+// EMERGENCY STOP
+// Immediately stops pump, opens solenoid, halts state machine
+// ============================================================================
+void emergencyStop() {
+  Serial.println("\n========================================");
+  Serial.println("[EMERGENCY STOP] Activated!");
+  Serial.println("========================================");
+
+  // Stop pump immediately - no ramping
+  digitalWrite(AIN1, LOW);
+  digitalWrite(AIN2, LOW);
+  analogWrite(PWMA, 0);
+
+  // Open solenoid to vent all air
+  digitalWrite(BIN1, HIGH);
+  digitalWrite(BIN2, LOW);
+  analogWrite(PWMB, 255);
+
+  Serial.println("  Pump:     OFF");
+  Serial.println("  Solenoid: OPEN (venting air)");
+  Serial.println("  State:    HALTED");
+  Serial.println("\nType 'r' to resume monitoring.");
+  Serial.println("Type 'h' for help menu.");
+  Serial.println("========================================\n");
+
+  currentState = STATE_STOPPED;
+}
+
+// ============================================================================
+// PRINT STATUS
+// ============================================================================
+void printStatus() {
+  Serial.println("========================================");
+  Serial.println("[STATUS]");
+  Serial.print("  State:       ");
+  switch (currentState) {
+    case STATE_CALIBRATE: Serial.println("CALIBRATING"); break;
+    case STATE_MONITOR:   Serial.println("MONITORING");  break;
+    case STATE_COMPRESS:  Serial.println("COMPRESSING"); break;
+    case STATE_COOLDOWN:  Serial.println("COOLDOWN");    break;
+    case STATE_STOPPED:   Serial.println("STOPPED");     break;
+  }
+  Serial.print("  Temp:        ");
+  Serial.print(currentTemp, 2);
+  Serial.print(" C / ");
+  Serial.print(toFahrenheit(currentTemp), 2);
+  Serial.println(" F");
+  Serial.print("  Temp baseline: ");
+  Serial.print(tempBaseline, 2);
+  Serial.println(" C");
+  Serial.print("  Cycles run:  ");
+  Serial.println(compressionCycleCount);
+  Serial.print("  FSR bypass:  ");
+  Serial.println(BYPASS_PRESSURE_SENSORS ? "YES" : "NO");
+  Serial.println("========================================\n");
+}
+
+// ============================================================================
+// PRINT HELP MENU
+// ============================================================================
+void printHelp() {
+  Serial.println("========================================");
+  Serial.println("  COMMANDS");
+  Serial.println("========================================");
+  Serial.println("  e - Emergency stop");
+  Serial.println("  r - Resume monitoring");
+  Serial.println("  s - Print status");
+  Serial.println("  h - Show this menu");
+  Serial.println("========================================\n");
+}
+
+// ============================================================================
+// PROCESS SERIAL COMMANDS
+// Can be called from any state
+// ============================================================================
+void processSerialCommands() {
+  if (!Serial.available()) return;
+
+  char cmd = Serial.read();
+
+  switch (cmd) {
+    case 'e': case 'E':
+      emergencyStop();
+      break;
+
+    case 'r': case 'R':
+      if (currentState == STATE_STOPPED) {
+        Serial.println("[RESUME] Returning to monitoring...\n");
+        // Close solenoid before resuming
+        digitalWrite(BIN1, LOW);
+        analogWrite(PWMB, 0);
+        currentState = STATE_MONITOR;
+        lastSensorRead = 0;
+      } else {
+        Serial.println("[INFO] System is already running.\n");
+      }
+      break;
+
+    case 's': case 'S':
+      printStatus();
+      break;
+
+    case 'h': case 'H': case '?':
+      printHelp();
+      break;
+
+    default:
+      break;
+  }
+}
+
+// ============================================================================
 // SETUP
 // ============================================================================
 void setup() {
@@ -124,12 +250,12 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   analogReadResolution(12);
 
-  // Pressure pins configured even if bypassed
+  // Pressure pins
   pinMode(PRESSURE_PIN_1, INPUT);
   pinMode(PRESSURE_PIN_2, INPUT);
   pinMode(PRESSURE_PIN_3, INPUT);
 
-  // TMP117 temperature sensor
+  // TMP117
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
   Serial.print("Initializing TMP117... ");
   if (!tmp117.begin()) {
@@ -139,10 +265,9 @@ void setup() {
   }
   Serial.println("OK!");
 
-  // EEPROM
   EEPROM.begin(EEPROM_SIZE);
 
-  // Print mode
+  // Print mode and commands
   Serial.println("========================================");
   if (BYPASS_PRESSURE_SENSORS) {
     Serial.println("  MODE: Temperature + Pneumatics");
@@ -156,6 +281,8 @@ void setup() {
   Serial.println("  Hold:     15s");
   Serial.println("  Release:  15s");
   Serial.println("  Cooldown: 30s");
+  Serial.println("----------------------------------------");
+  Serial.println("  COMMANDS: e=stop  r=resume  s=status  h=help");
   Serial.println("========================================\n");
 
   currentState = STATE_CALIBRATE;
@@ -165,6 +292,9 @@ void setup() {
 // MAIN LOOP
 // ============================================================================
 void loop() {
+  // Always check for serial commands regardless of state
+  processSerialCommands();
+
   switch (currentState) {
     case STATE_CALIBRATE:
       runCalibration();
@@ -181,14 +311,20 @@ void loop() {
     case STATE_COOLDOWN:
       runCooldown();
       break;
+    case STATE_STOPPED:
+      // Do nothing - wait for 'r' command
+      // LED blinks fast to indicate stopped state
+      break;
     default:
       currentState = STATE_CALIBRATE;
       break;
   }
 
-  // Heartbeat LED blinks every second
+  // Heartbeat LED
+  // Fast blink = stopped, slow blink = running
   static unsigned long lastBlink = 0;
-  if (millis() - lastBlink > 1000) {
+  unsigned long blinkInterval = (currentState == STATE_STOPPED) ? 200 : 1000;
+  if (millis() - lastBlink > blinkInterval) {
     digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
     lastBlink = millis();
   }
@@ -196,7 +332,6 @@ void loop() {
 
 // ============================================================================
 // STATE: CALIBRATE
-// 20-sample average of temp (and pressure if not bypassed)
 // ============================================================================
 void runCalibration() {
   Serial.println("========================================");
@@ -205,9 +340,13 @@ void runCalibration() {
   Serial.println("  Sampling for ~3 seconds...");
   Serial.println("========================================\n");
 
-  // Temperature baseline
   float tempSum = 0.0;
   for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
+
+    // Check for emergency stop during calibration
+    processSerialCommands();
+    if (currentState == STATE_STOPPED) return;
+
     sensors_event_t event;
     tmp117.getEvent(&event);
     tempSum += event.temperature;
@@ -226,7 +365,6 @@ void runCalibration() {
   }
   tempBaseline = tempSum / CALIBRATION_SAMPLES;
 
-  // Pressure baseline (only if not bypassed)
   if (!BYPASS_PRESSURE_SENSORS) {
     float pressureSum = 0.0;
     for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
@@ -246,7 +384,6 @@ void runCalibration() {
     Serial.println("[CALIBRATE] Pressure: SKIPPED");
   }
 
-  // Print temperature baseline in both units
   Serial.print("[CALIBRATE] Temp baseline:     ");
   Serial.print(tempBaseline, 2);
   Serial.print(" C / ");
@@ -259,26 +396,24 @@ void runCalibration() {
   Serial.print(toFahrenheit(tempBaseline + TEMP_THRESHOLD_POSSIBLE), 2);
   Serial.println(" F\n");
 
-  Serial.println("[CALIBRATE] Done! Monitoring started.\n");
+  Serial.println("[CALIBRATE] Done! Monitoring started.");
+  Serial.println("  Type 'e' at any time to emergency stop.\n");
 }
 
 // ============================================================================
 // STATE: MONITOR
-// Reads sensors every 500ms and checks OR trigger logic
 // ============================================================================
 void runMonitor() {
   unsigned long now = millis();
   if (now - lastSensorRead < SENSOR_READ_INTERVAL_MS) return;
   lastSensorRead = now;
 
-  // Read temperature
   sensors_event_t event;
   tmp117.getEvent(&event);
   currentTemp = event.temperature;
-  float tempDelta   = currentTemp - tempBaseline;
+  float tempDelta    = currentTemp - tempBaseline;
   float currentTempF = toFahrenheit(currentTemp);
 
-  // Read pressure only if enabled
   float pressureDelta = 0.0;
   if (!BYPASS_PRESSURE_SENSORS) {
     float p1 = analogRead(PRESSURE_PIN_1);
@@ -289,7 +424,6 @@ void runMonitor() {
     pressureTriggered = (pressureDelta >= PRESSURE_DEVIATION_THRESHOLD);
   }
 
-  // Print monitoring line with C and F
   Serial.print("[MONITOR] Temp: ");
   Serial.print(currentTemp, 2);
   Serial.print(" C / ");
@@ -311,7 +445,6 @@ void runMonitor() {
     Serial.print(" | ");
   }
 
-  // Trigger check
   tempTriggered = (tempDelta >= TEMP_THRESHOLD_POSSIBLE);
 
   if (tempTriggered || pressureTriggered) {
@@ -327,42 +460,80 @@ void runMonitor() {
 // ============================================================================
 // STATE: COMPRESS
 // Inflate 30s → Hold 15s → Release 15s
+// Emergency stop checked during each phase
 // ============================================================================
 void runCompression() {
+  compressionCycleCount++;
+
   Serial.println("\n========================================");
-  Serial.println("[COMPRESS] Starting compression cycle");
+  Serial.print("[COMPRESS] Starting cycle #");
+  Serial.println(compressionCycleCount);
+  Serial.println("  Type 'e' to emergency stop at any time");
   Serial.println("========================================");
 
-  // Phase 1: Inflate
+  // ── Phase 1: Inflate ──────────────────────────────────────
   Serial.println("[COMPRESS] Phase 1: Inflate (30s)...");
   digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW);
-  analogWrite(PWMA, 200);          // Maximum pump speed
+  analogWrite(PWMA, 200);
   digitalWrite(BIN1, LOW); digitalWrite(BIN2, LOW);
-  analogWrite(PWMB, 0);            // Solenoid closed - trap air
-  delay(30000);
+  analogWrite(PWMB, 0);
 
-  // Phase 2: Hold
+  unsigned long phaseStart = millis();
+  while (millis() - phaseStart < 30000) {
+    processSerialCommands();
+    if (currentState == STATE_STOPPED) return;  // exit immediately
+
+    // Print countdown every 5 seconds
+    unsigned long elapsed = millis() - phaseStart;
+    static unsigned long lastPrint = 0;
+    if (elapsed - lastPrint >= 5000) {
+      int remaining = (30000 - elapsed) / 1000;
+      Serial.print("  Inflate: ");
+      Serial.print(remaining);
+      Serial.println("s remaining...");
+      lastPrint = elapsed;
+    }
+    delay(100);
+  }
+
+  // Stop pump
+  digitalWrite(AIN1, LOW); analogWrite(PWMA, 0);
+  Serial.println("[COMPRESS] Phase 1 complete.\n");
+
+  // ── Phase 2: Hold ─────────────────────────────────────────
   Serial.println("[COMPRESS] Phase 2: Hold (15s)...");
-  analogWrite(PWMA, 0);            // Pump off
-  digitalWrite(AIN1, LOW);
-  delay(15000);
+  phaseStart = millis();
+  while (millis() - phaseStart < 15000) {
+    processSerialCommands();
+    if (currentState == STATE_STOPPED) return;
+    delay(100);
+  }
+  Serial.println("[COMPRESS] Phase 2 complete.\n");
 
-  // Phase 3: Release
+  // ── Phase 3: Release ──────────────────────────────────────
   Serial.println("[COMPRESS] Phase 3: Release (15s)...");
   digitalWrite(BIN1, HIGH); digitalWrite(BIN2, LOW);
-  analogWrite(PWMB, 255);          // Solenoid open - vent air
-  delay(15000);
+  analogWrite(PWMB, 255);
 
-  // Safe state - everything off
+  phaseStart = millis();
+  while (millis() - phaseStart < 15000) {
+    processSerialCommands();
+    if (currentState == STATE_STOPPED) return;
+    delay(100);
+  }
+
+  // Safe state
   digitalWrite(BIN1, LOW); analogWrite(PWMB, 0);
   digitalWrite(AIN1, LOW); analogWrite(PWMA, 0);
 
-  Serial.println("[COMPRESS] Cycle complete.\n");
+  Serial.println("[COMPRESS] Cycle complete.");
+  Serial.print("[COMPRESS] Total cycles completed: ");
+  Serial.println(compressionCycleCount);
+  Serial.println();
 }
 
 // ============================================================================
 // STATE: COOLDOWN
-// Waits 30 seconds before returning to monitoring
 // ============================================================================
 void runCooldown() {
   unsigned long elapsed = millis() - cooldownStart;
