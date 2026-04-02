@@ -2,9 +2,6 @@
  * LymphedemaSleeve.ino
  * Main Firmware 
  * ============================================================
- * EXPO-READY VERSION - WITH EMERGENCY STOP
- * April 23rd - Senior Design Expo
- * ============================================================
  *
  * BYPASS FLAG:
  *   true  = Temperature only (current mode - FSRs not yet calibrated)
