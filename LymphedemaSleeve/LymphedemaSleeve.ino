@@ -3,6 +3,13 @@
  * Main Firmware 
  * ============================================================
  *
+ * PRESSURE SENSOR NOTE (current hardware config):
+ *   One physical FSR 402 sensor is connected to all three pins
+ *   (GPIO 34, 35, 36). The three readings are averaged together
+ *   and treated as a single sensor value. This keeps the 3-pin
+ *   wiring structure intact for future expansion to 3 separate
+ *   sensors — just set SINGLE_SENSOR_MODE false in config.h.
+ *
  * BYPASS FLAG:
  *   true  = Temperature only (current mode - FSRs not yet calibrated)
  *   false = Full OR logic   (flip when FSRs are calibrated)
@@ -86,6 +93,29 @@ unsigned long lastSensorRead = 0;
 int compressionCycleCount = 0;
 
 // ============================================================================
+// HELPER: Read pressure from all 3 pins and average them.
+// With one physical sensor wired to all 3 pins the values will be
+// nearly identical — averaging cancels any minor ADC noise.
+// When 3 separate sensors are installed, this naturally averages them.
+// NEW CODE!!!
+// ============================================================================
+float readAveragePressure() {
+  float p1 = analogRead(PRESSURE_PIN_1);
+  float p2 = analogRead(PRESSURE_PIN_2);
+  float p3 = analogRead(PRESSURE_PIN_3);
+
+#if SINGLE_SENSOR_MODE
+  // All pins read the same physical sensor — simple average for noise reduction
+  return (p1 + p2 + p3) / 3.0;
+#else
+  // Three separate sensors — average across the sleeve
+  return (p1 + p2 + p3) / 3.0;
+#endif
+  // Note: the math is identical either way; SINGLE_SENSOR_MODE controls
+  // Serial output labelling only (see runMonitor / runCalibration).
+}
+
+// ============================================================================
 // HELPER: Celsius to Fahrenheit
 // ============================================================================
 float toFahrenheit(float celsius) {
@@ -166,6 +196,8 @@ void printStatus() {
   Serial.println(compressionCycleCount);
   Serial.print("  FSR bypass:  ");
   Serial.println(BYPASS_PRESSURE_SENSORS ? "YES" : "NO");
+  Serial.print("  Sensor mode:    ");
+  Serial.println(SINGLE_SENSOR_MODE ? "SINGLE (1 FSR on 3 pins)" : "MULTI (3 separate FSRs)");
   Serial.println("========================================\n");
 }
 
@@ -266,6 +298,13 @@ void setup() {
 
   // Print mode and commands
   Serial.println("========================================");
+   if (SINGLE_SENSOR_MODE) {
+    Serial.println("  PRESSURE: Single FSR on GPIO 34/35/36");
+    Serial.println("  (1 sensor wired to all 3 pins, averaged)");
+  } else {
+    Serial.println("  PRESSURE: 3 separate FSR sensors");
+    Serial.println("  GPIO 34 (proximal), 35 (middle), 36 (distal)");
+  }
   if (BYPASS_PRESSURE_SENSORS) {
     Serial.println("  MODE: Temperature + Pneumatics");
     Serial.println("  Pressure: BYPASSED");
@@ -365,18 +404,20 @@ void runCalibration() {
   if (!BYPASS_PRESSURE_SENSORS) {
     float pressureSum = 0.0;
     for (int i = 0; i < CALIBRATION_SAMPLES; i++) {
-      float p1 = analogRead(PRESSURE_PIN_1);
-      float p2 = analogRead(PRESSURE_PIN_2);
-      float p3 = analogRead(PRESSURE_PIN_3);
-      pressureSum += (p1 + p2 + p3) / 3.0;
+      pressureSum += readAveragePressure();
       delay(CALIBRATION_DELAY_MS);
     }
     pressureBaseline = pressureSum / CALIBRATION_SAMPLES;
+// NEW CODE
     Serial.print("[CALIBRATE] Pressure baseline: ");
     Serial.print((int)pressureBaseline);
     Serial.print(" ADC (");
     Serial.print(adcToMmHg(pressureBaseline), 1);
-    Serial.println(" mmHg)");
+    if (SINGLE_SENSOR_MODE) {
+      Serial.println(" mmHg) [single FSR, avg of 3 pins]");
+    } else {
+      Serial.println(" mmHg) [avg of 3 sensors]");
+    }
   } else {
     Serial.println("[CALIBRATE] Pressure: SKIPPED");
   }
@@ -411,12 +452,10 @@ void runMonitor() {
   float tempDelta    = currentTemp - tempBaseline;
   float currentTempF = toFahrenheit(currentTemp);
 
+// NEW CODE
   float pressureDelta = 0.0;
   if (!BYPASS_PRESSURE_SENSORS) {
-    float p1 = analogRead(PRESSURE_PIN_1);
-    float p2 = analogRead(PRESSURE_PIN_2);
-    float p3 = analogRead(PRESSURE_PIN_3);
-    currentPressure   = (p1 + p2 + p3);
+    currentPressure   = readAveragePressure();
     pressureDelta     = currentPressure - pressureBaseline;
     pressureTriggered = (pressureDelta >= PRESSURE_DEVIATION_THRESHOLD);
   }
@@ -456,7 +495,7 @@ void runMonitor() {
 
 // ============================================================================
 // STATE: COMPRESS
-// Inflate 30s → Hold 15s → Release 15s
+// Inflate 45s → Hold 15s → Release 15s
 // Emergency stop checked during each phase
 // ============================================================================
 void runCompression() {
@@ -469,14 +508,16 @@ void runCompression() {
   Serial.println("========================================");
 
   // ── Phase 1: Inflate ──────────────────────────────────────
-  Serial.println("[COMPRESS] Phase 1: Inflate (30s)...");
+  Serial.println("[COMPRESS] Phase 1: Inflate (45s)...");
   digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW);
   analogWrite(PWMA, 200);
   digitalWrite(BIN1, LOW); digitalWrite(BIN2, LOW);
   analogWrite(PWMB, 0);
 
   unsigned long phaseStart = millis();
-  while (millis() - phaseStart < 30000) {
+  // new line ^
+
+  while (millis() - phaseStart < 45000) {
     processSerialCommands();
     if (currentState == STATE_STOPPED) return;  // exit immediately
 
@@ -513,7 +554,7 @@ void runCompression() {
   analogWrite(PWMB, 255);
 
   phaseStart = millis();
-  while (millis() - phaseStart < 15000) {
+  while (millis() - phaseStart < 25000) {
     processSerialCommands();
     if (currentState == STATE_STOPPED) return;
     delay(100);
