@@ -35,7 +35,7 @@
 // BYPASS FLAG
 // Set to false once FSR sensors are wired and calibrated
 // ============================================================
-#define BYPASS_PRESSURE_SENSORS true
+#define BYPASS_PRESSURE_SENSORS false
 
 // ============================================================================
 // mmHg CALIBRATION TABLE
@@ -416,7 +416,7 @@ void runMonitor() {
     float p1 = analogRead(PRESSURE_PIN_1);
     float p2 = analogRead(PRESSURE_PIN_2);
     float p3 = analogRead(PRESSURE_PIN_3);
-    currentPressure   = (p1 + p2 + p3) / 3.0;
+    currentPressure   = (p1 + p2 + p3);
     pressureDelta     = currentPressure - pressureBaseline;
     pressureTriggered = (pressureDelta >= PRESSURE_DEVIATION_THRESHOLD);
   }
