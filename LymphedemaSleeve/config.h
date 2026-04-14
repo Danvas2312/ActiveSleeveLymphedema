@@ -7,6 +7,13 @@
 #define CONFIG_H
 
 // ========================================
+// SENSOR MODE
+// Set true  = one physical FSR wired to all 3 pins (current hardware)
+// Set false = three separate FSR sensors (future expansion)
+// ========================================
+#define SINGLE_SENSOR_MODE true
+
+// ========================================
 // TEMPERATURE THRESHOLDS
 // Source: Design Specifications Document, Section 2
 // These are deviations ABOVE the patient's baseline
