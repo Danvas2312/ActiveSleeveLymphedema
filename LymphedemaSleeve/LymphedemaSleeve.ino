@@ -271,6 +271,8 @@ void setup() {
   // Motor driver pins
   pinMode(AIN1, OUTPUT); pinMode(AIN2, OUTPUT); pinMode(PWMA, OUTPUT);
   pinMode(BIN1, OUTPUT); pinMode(BIN2, OUTPUT); pinMode(PWMB, OUTPUT);
+  pinMode(STBY_PIN, OUTPUT);
+  digitalWrite(STBY_PIN, HIGH);  // Enable TB6612FNG
 
   // Safe initial state: pump off, solenoid closed
   digitalWrite(AIN1, LOW); digitalWrite(AIN2, LOW); analogWrite(PWMA, 0);
@@ -511,21 +513,21 @@ void runCompression() {
   Serial.println("[COMPRESS] Phase 1: Inflate (45s)...");
   digitalWrite(AIN1, HIGH); digitalWrite(AIN2, LOW);
   analogWrite(PWMA, 200);
+  // Solenoid stays CLOSED during inflate — no change needed here
   digitalWrite(BIN1, LOW); digitalWrite(BIN2, LOW);
   analogWrite(PWMB, 0);
 
   unsigned long phaseStart = millis();
-  // new line ^
+  unsigned long lastPrint = 0;
 
   while (millis() - phaseStart < 45000) {
     processSerialCommands();
-    if (currentState == STATE_STOPPED) return;  // exit immediately
+    if (currentState == STATE_STOPPED) return;
 
-    // Print countdown every 5 seconds
     unsigned long elapsed = millis() - phaseStart;
-    static unsigned long lastPrint = 0;
     if (elapsed - lastPrint >= 5000) {
-      int remaining = (30000 - elapsed) / 1000;
+      int remaining = (45000 - elapsed) / 1000;
+      if (remaining < 0) remaining = 0;
       Serial.print("  Inflate: ");
       Serial.print(remaining);
       Serial.println("s remaining...");
@@ -534,7 +536,6 @@ void runCompression() {
     delay(100);
   }
 
-  // Stop pump
   digitalWrite(AIN1, LOW); analogWrite(PWMA, 0);
   Serial.println("[COMPRESS] Phase 1 complete.\n");
 
@@ -548,10 +549,12 @@ void runCompression() {
   }
   Serial.println("[COMPRESS] Phase 2 complete.\n");
 
-  // ── Phase 3: Release ──────────────────────────────────────
-  Serial.println("[COMPRESS] Phase 3: Release (15s)...");
+  // ── Phase 3: Release — peak-and-hold ──────────────────────
+  Serial.println("[COMPRESS] Phase 3: Release (25s)...");
   digitalWrite(BIN1, HIGH); digitalWrite(BIN2, LOW);
-  analogWrite(PWMB, 255);
+  analogWrite(PWMB, 255);   // Full power for 150ms to guarantee it opens
+  delay(150);
+  analogWrite(PWMB, 60);    // Drop to ~24% holding current — enough to stay open, won't overheat
 
   phaseStart = millis();
   while (millis() - phaseStart < 25000) {
